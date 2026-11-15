@@ -17,6 +17,7 @@ export async function openGamepad({ python, targetExe, dryRun = false }) {
   let stderr = '';
   let pending;
   let stopped = false;
+  let observing = false;
 
   function finish(error, result) {
     const request = pending;
@@ -64,15 +65,39 @@ export async function openGamepad({ python, targetExe, dryRun = false }) {
     stop();
     throw new Error('Gamepad did not announce readiness');
   }
+  async function play(steps) {
+    const line = JSON.stringify({ steps }) + '\n';
+    if (Buffer.byteLength(line) > 16384) throw new Error('Command exceeds the line limit');
+    const response = readReply(13000);
+    child.stdin.write(line);
+    const result = await response;
+    if (!result.ok) throw new Error(result.error);
+    return result;
+  }
+
   return {
     async play(steps) {
-      const line = JSON.stringify({ steps }) + '\n';
-      if (Buffer.byteLength(line) > 16384) throw new Error('Command exceeds the line limit');
-      const response = readReply(13000);
-      child.stdin.write(line);
-      const result = await response;
-      if (!result.ok) throw new Error(result.error);
-      return result;
+      if (observing) throw new Error('Wait for the action and its observation to finish');
+      return play(steps);
+    },
+    async act(steps, observe) {
+      if (typeof observe !== 'function') throw new TypeError('Provide an observation callback');
+      if (observing) throw new Error('Wait for the action and its observation to finish');
+      observing = true;
+      try {
+        const started = performance.now();
+        const result = await play(steps);
+        const released = performance.now();
+        const observation = await observe();
+        return {
+          result,
+          observation,
+          inputMs: released - started,
+          observationMs: performance.now() - released,
+        };
+      } finally {
+        observing = false;
+      }
     },
     stop,
   };

@@ -63,23 +63,32 @@ class Foreground:
         )
         self.kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
 
-    def __call__(self):
+    def identity(self):
         window = self.user.GetForegroundWindow()
         if not window:
-            return False
+            return None
         process_id = wintypes.DWORD()
-        self.user.GetWindowThreadProcessId(window, ctypes.byref(process_id))
-        process = self.kernel.OpenProcess(0x1000, False, process_id.value)
+        if not self.user.GetWindowThreadProcessId(window, ctypes.byref(process_id)):
+            return None
+        return window, process_id.value
+
+    def for_sequence(self):
+        target = self.identity()
+        if target is None:
+            return lambda: False
+        process = self.kernel.OpenProcess(0x1000, False, target[1])
         if not process:
-            return False
+            return lambda: False
         try:
             path = ctypes.create_unicode_buffer(32768)
             length = wintypes.DWORD(len(path))
             if not self.kernel.QueryFullProcessImageNameW(process, 0, path, ctypes.byref(length)):
-                return False
-            return PureWindowsPath(path.value).name.casefold() == self.exe
+                return lambda: False
+            if PureWindowsPath(path.value).name.casefold() != self.exe:
+                return lambda: False
         finally:
             self.kernel.CloseHandle(process)
+        return lambda: self.identity() == target
 
 
 class XboxPad:
@@ -126,7 +135,7 @@ def reply(message):
     print(json.dumps(message), flush=True)
 
 
-def serve(pad, focused):
+def serve(pad, focus_for_sequence):
     reply({"ready": True})
     try:
         while raw := sys.stdin.buffer.readline(MAX_LINE + 1):
@@ -140,8 +149,13 @@ def serve(pad, focused):
                 steps = normalize(command["steps"])
                 if isinstance(pad, TracePad):
                     pad.entries.clear()
-                play(pad, steps, focused)
-                result = {"ok": True, "steps": len(steps)}
+                started = time.perf_counter()
+                play(pad, steps, focus_for_sequence())
+                result = {
+                    "ok": True,
+                    "steps": len(steps),
+                    "playback_ms": round((time.perf_counter() - started) * 1000, 2),
+                }
                 if isinstance(pad, TracePad):
                     result["trace"] = pad.entries
                 reply(result)
@@ -163,10 +177,10 @@ def main():
         parser.error("live mode requires --target-exe with an executable basename")
     try:
         if args.dry_run:
-            serve(TracePad(), lambda: True)
+            serve(TracePad(), lambda: lambda: True)
         else:
             focused = Foreground(args.target_exe)
-            serve(XboxPad(), focused)
+            serve(XboxPad(), focused.for_sequence)
     except KeyboardInterrupt:
         return 130
     except Exception as error:

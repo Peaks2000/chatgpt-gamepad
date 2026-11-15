@@ -1,6 +1,6 @@
 # ChatGPT Gamepad
 
-A local Windows bridge and Codex skill for controlling a game through a virtual Xbox 360 controller. One Python process owns the controller. Codex can send a sequence of stick positions, trigger pressures, and button holds in one call. Python handles their timing locally while Codex uses screenshots to decide the next action.
+A local Windows bridge and Codex skill for controlling a game through a virtual Xbox 360 controller. One Python process owns the controller for the session. The Node client can send a timed controller sequence and capture the next frame in a single Codex tool call. Short actions keep screen feedback frequent, and longer sequences let predictable movement run at local speed.
 
 ## Setup
 

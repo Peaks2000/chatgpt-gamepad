@@ -20,9 +20,14 @@ try {
   assert.ok(trace[2].at_ms - trace[1].at_ms >= 64);
 
   await assert.rejects(() => pad.play([{ ms: 20 }, { ms: 20, lx: 2 }]), /lx must be/);
-  const next = await pad.play([{ ms: 20 }]);
-  assert.equal(next.trace.length, 2);
-  assert.equal(next.trace[1].state, null);
+  const next = await pad.act([{ ms: 20 }], async () => {
+    await assert.rejects(() => pad.play([{ ms: 20 }]), /observation to finish/);
+    return 'frame';
+  });
+  assert.equal(next.result.trace.length, 2);
+  assert.equal(next.result.trace[1].state, null);
+  assert.equal(next.observation, 'frame');
+  assert.ok(next.inputMs >= 19);
   const interrupted = pad.play([{ ms: 10000, lt: 1 }]);
   pad.stop();
   await assert.rejects(interrupted, /session stopped/);
