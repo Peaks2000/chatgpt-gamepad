@@ -1,6 +1,6 @@
 ---
 name: gamepad-control
-description: Send timed Xbox controller inputs to a Windows game or controller-compatible app when the user asks Codex to operate it through a virtual gamepad. Use for analog movement, stick aim, button holds, and triggers.
+description: Operate Windows games and controller-compatible apps through a virtual Xbox gamepad. Use for smooth analog movement, calibrated stick aim, button holds, triggers, and live Fortnite play.
 ---
 
 # Control a Windows app with a virtual gamepad
@@ -24,5 +24,19 @@ await gamepad.act(
 Use `act(steps, observe)` for live play. The callback captures the next frame in the same tool call after the bridge releases all inputs. Inspect that frame before choosing the next action. Use `play(steps)` when a separate observation is unnecessary. If capture fails, refresh the screen before retrying because the input may have already run.
 
 Identify controller bindings from the app. Begin with short stick and button pulses, and calibrate camera motion against the observed heading. Combine movement and aim in one step when both should occur together. Use longer sequences for predictable traversal. Switching to another window releases an active sequence. The `act` result contains `inputMs` and `observationMs` for local timing. These exclude model reasoning and tool dispatch.
+
+Use `rampSticks` from [motion.mjs](scripts/motion.mjs) to ease the sticks into or out of a planned move. It returns normal bridge steps with the given duration. Pass the previous step's stick values as `from` to join a ramp smoothly. Put reactions that must be immediate in direct `play` or `act` steps.
+
+```js
+const { rampSticks } = await import(motionModuleFileUrl);
+const stride = { ly: 0.85, rx: 0.4 };
+await gamepad.act([
+  ...rampSticks({ to: stride, ms: 120 }),
+  { ...stride, ms: 360 },
+  ...rampSticks({ from: stride, ms: 100 }),
+], observeGame);
+```
+
+Read the [Fortnite playbook](references/fortnite.md) when playing Fortnite. It covers calibration, movement under pressure, and choosing actions from fresh frames.
 
 When handing control back, ending work, or receiving a user stop signal, call `gamepad.stop()`. After a focus change, recheck the current screen before resuming authorized control. To diagnose command timing without emitting controller inputs, open with `{python: pythonExecutable, dryRun: true}` and inspect the returned trace.

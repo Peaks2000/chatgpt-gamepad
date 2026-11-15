@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { openGamepad } from './gamepad-control/scripts/session.mjs';
+import { rampSticks } from './gamepad-control/scripts/motion.mjs';
 
 const python = process.argv[2];
 if (!python) throw new Error('Usage: node smoke-test.mjs <python executable>');
@@ -28,6 +29,17 @@ try {
   assert.equal(next.result.trace[1].state, null);
   assert.equal(next.observation, 'frame');
   assert.ok(next.inputMs >= 19);
+  const stride = { ly: 0.8, rx: -0.5 };
+  const accelerate = rampSticks({ to: stride, ms: 127, buttons: ['LB'] });
+  const brake = rampSticks({ from: stride, ms: 101, buttons: ['LB'] });
+  const { trace: motion } = await pad.play([...accelerate, ...brake]);
+  assert.equal(accelerate.reduce((total, report) => total + report.ms, 0), 127);
+  assert.equal(brake.reduce((total, report) => total + report.ms, 0), 101);
+  assert.ok(accelerate[0].ly > 0 && accelerate[0].ly < accelerate[1].ly);
+  assert.equal(motion[accelerate.length - 1].state.rx, -0.5);
+  assert.equal(motion.at(-2).state.ly, 0);
+  assert.ok(motion.slice(0, -1).every(entry => entry.state.buttons.includes('LB')));
+  assert.equal(motion.at(-1).state, null);
   const interrupted = pad.play([{ ms: 10000, lt: 1 }]);
   pad.stop();
   await assert.rejects(interrupted, /session stopped/);
