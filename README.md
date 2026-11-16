@@ -67,4 +67,14 @@ Model inference is usually the dominant delay. The Codex path starts a CLI turn 
 
 Add `--controls presets` to let the model choose a named action each turn. The harness applies the matching fixed controller sequence, including small aim corrections, eased turns, movement, and button taps. Start with presets when tuning a local model. Use the default direct controls when a game needs custom button combinations or hold durations. The game’s controller settings determine how far a stick action moves or turns.
 
+Use `--preset-file controls.json` to replace the built-in presets with actions calibrated for your game. Give each action a descriptive name and up to six controller states totaling at most 2.5 seconds. The harness always includes an `observe` action that sends no input. A short action list lets you test just the decisions a scenario needs.
+
+```json
+{
+  "aim_right_small": [{ "ms": 150, "rx": 0.55 }],
+  "aim_left_small": [{ "ms": 150, "rx": -0.55 }],
+  "move_forward": [{ "ms": 650, "ly": 0.85 }]
+}
+```
+
 To check a model against a saved PNG or JPEG without sending controller inputs to a game, replace `--target MyGame.exe` with `--dry-run --frame sample.png --turns 1`. The selected model still receives the image.

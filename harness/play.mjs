@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util';
 import { openGamepad } from '../gamepad-control/scripts/session.mjs';
 import { buildPrompt, parseAction } from './actions.mjs';
 import { codexProvider, ollamaProvider, ollamaSchema } from './providers.mjs';
-import { presetPrompt, presetSchema, parsePreset } from './presets.mjs';
+import { createPresets, loadPresets } from './presets.mjs';
 
 const { values: config } = parseArgs({ options: {
   provider: { type: 'string', default: 'ollama' },
@@ -15,7 +15,8 @@ const { values: config } = parseArgs({ options: {
   python: { type: 'string', default: 'python' },
   target: { type: 'string' },
   goal: { type: 'string' },
-  controls: { type: 'string', default: 'direct' },
+  controls: { type: 'string' },
+  'preset-file': { type: 'string' },
   turns: { type: 'string', default: '10' },
   'timeout-ms': { type: 'string', default: '30000' },
   'max-frame-age-ms': { type: 'string' },
@@ -59,7 +60,7 @@ function startCapture(signal, width) {
 
 async function main() {
   if (config.help) {
-    console.log('node harness/play.mjs --provider ollama|codex --goal "..." [--controls direct|presets] [--model NAME] [--codex PATH] [--python PATH] [--target GAME.exe] [--turns N] [--timeout-ms MS] [--max-frame-age-ms MS] [--frame-width PX] [--dry-run --frame IMAGE]');
+    console.log('node harness/play.mjs --provider ollama|codex --goal "..." [--controls direct|presets] [--preset-file PATH] [--model NAME] [--codex PATH] [--python PATH] [--target GAME.exe] [--turns N] [--timeout-ms MS] [--max-frame-age-ms MS] [--frame-width PX] [--dry-run --frame IMAGE]');
     return;
   }
   const turns = Number(config.turns);
@@ -67,7 +68,8 @@ async function main() {
   const width = Number(config['frame-width']);
   const maxAge = config['max-frame-age-ms'] === undefined ? Infinity : Number(config['max-frame-age-ms']);
   if (!config.goal?.trim() || !['ollama', 'codex'].includes(config.provider) ||
-      !['direct', 'presets'].includes(config.controls) ||
+      !['direct', 'presets'].includes(config.controls ?? 'direct') ||
+      (config['preset-file'] && config.controls === 'direct') ||
       (config.provider === 'ollama' && !config.model) ||
       (config['dry-run'] ? !config.frame : !/^[^/\\]+\.exe$/i.test(config.target ?? '') || config.frame) ||
       !Number.isSafeInteger(turns) || turns < 1 ||
@@ -77,6 +79,9 @@ async function main() {
     throw new Error('Invalid arguments. See --help. Live mode needs --target, and dry run needs --frame.');
   }
 
+  const presetFile = config['preset-file'];
+  const customActions = presetFile ? loadPresets(await readFile(presetFile, 'utf8')) : undefined;
+  const presets = presetFile || config.controls === 'presets' ? createPresets(customActions) : undefined;
   const controller = new AbortController();
   const { signal } = controller;
   let pad;
@@ -88,8 +93,7 @@ async function main() {
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
   try {
-    const presets = config.controls === 'presets';
-    const schema = presets ? presetSchema : config.provider === 'ollama' ? ollamaSchema : undefined;
+    const schema = presets?.schema ?? (config.provider === 'ollama' ? ollamaSchema : undefined);
     const decide = config.provider === 'ollama'
       ? ollamaProvider(config.model, timeout, signal, schema)
       : await codexProvider(config.codex, config.model, timeout, signal, schema);
@@ -110,9 +114,9 @@ async function main() {
       const started = performance.now();
       const frame = fixture ?? await camera.frame();
       const captured = performance.now();
-      const prompt = presets ? presetPrompt(config.goal, previous) : buildPrompt(config.goal, previous ?? [], schema);
+      const prompt = presets ? presets.prompt(config.goal, previous) : buildPrompt(config.goal, previous ?? [], schema);
       const output = await decide(prompt, frame);
-      const { action, steps } = presets ? parsePreset(output) : { steps: parseAction(output) };
+      const { action, steps } = presets ? presets.parse(output) : { steps: parseAction(output) };
       signal.throwIfAborted();
       const decided = performance.now();
       const stale = decided - started > maxAge;
