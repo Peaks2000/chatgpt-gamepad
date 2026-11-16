@@ -37,3 +37,32 @@ The program reads one JSON object per line from stdin. It prints a readiness mes
 ```
 
 Use an app's observed controller bindings. Commands are rejected when the target executable is outside the foreground. Alt+Tab away from the game to release the current input, or call `gamepad.stop()` to stop the Node session and disconnect the controller. In the standalone terminal, Ctrl+C stops the bridge. Passing `--dry-run` prints the actual report timing and bypasses the driver and foreground check.
+
+## Play with a model
+
+The standalone Windows harness captures the visible client area, sends one frame to a model, validates its next controller plan, and runs it through the same Xbox bridge. It logs capture, model, and controller time for every turn. Use windowed or borderless mode for reliable capture. Inside the Codex harness, the [Gamepad Control skill](gamepad-control/SKILL.md) uses Computer Use's native screenshot display.
+
+Install the capture dependency in the same Python environment you used for the controller. The harness also requires Node.js 22 or later.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install Pillow
+```
+
+**Ollama.** Start the local Ollama server, pull a vision model per the [Ollama vision guide](https://docs.ollama.com/capabilities/vision), and pass its installed tag as `--model`. Frames are sent to the local Ollama server on port 11434.
+
+```powershell
+ollama pull qwen3-vl:2b-instruct
+node harness/play.mjs --provider ollama --model qwen3-vl:2b-instruct --python .\.venv\Scripts\python.exe --target MyGame.exe --goal "Follow the trail and stay behind cover"
+```
+
+**ChatGPT subscription.** Install the [Codex CLI](https://developers.openai.com/codex/cli), run `codex login`, and choose ChatGPT sign-in. The harness checks the CLI login mode and sends screenshots to OpenAI through Codex. It uses the signed-in account's Codex usage allowance. Pass `--model` to select an available Codex model, or let the CLI choose its default. If Codex is outside your PATH, use `--codex` with the full executable path. See [Codex authentication](https://learn.chatgpt.com/docs/auth).
+
+```powershell
+node harness/play.mjs --provider codex --python .\.venv\Scripts\python.exe --target MyGame.exe --goal "Move toward the next checkpoint using cover"
+```
+
+Switch to the target window during the five-second countdown. The harness takes up to ten decisions by default. Set `--turns` for a longer session. The controller releases input after every sequence. Alt+Tab away to stop gameplay commands, or use Ctrl+C to stop the harness.
+
+Model inference is usually the dominant delay. The Codex path starts a CLI turn for each frame and is suited to slower, deliberate actions. With a fast local model, tune `--frame-width` and set `--max-frame-age-ms` to skip decisions that arrive too late for the game. Judge model performance from the logged times and play results.
+
+To check a model against a saved PNG or JPEG without sending controller inputs to a game, replace `--target MyGame.exe` with `--dry-run --frame sample.png --turns 1`. The selected model still receives the image.
