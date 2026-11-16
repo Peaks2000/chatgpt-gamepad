@@ -32,14 +32,21 @@ function startCapture(signal, width) {
   worker.stdin.on('error', error => { failure = error; });
   const lines = createInterface({ input: worker.stdout });
   const frames = lines[Symbol.asyncIterator]();
+  async function request(command) {
+    worker.stdin.write(command + '\n');
+    const next = await frames.next();
+    if (next.done) throw failure ?? new Error('Capture worker stopped');
+    const reply = JSON.parse(next.value);
+    if (reply.error) throw new Error(reply.error);
+    return reply;
+  }
   return {
     async frame() {
-      worker.stdin.write('\n');
-      const next = await frames.next();
-      if (next.done) throw failure ?? new Error('Capture worker stopped');
-      const reply = JSON.parse(next.value);
-      if (reply.error) throw new Error(reply.error);
+      const reply = await request('capture');
       return Buffer.from(reply.frame, 'base64');
+    },
+    async checkFocus() {
+      await request('check');
     },
     stop() {
       lines.close();
@@ -103,7 +110,11 @@ async function main() {
       signal.throwIfAborted();
       const decided = performance.now();
       const stale = decided - started > maxAge;
-      if (steps.length && !stale) await pad.play(steps);
+      if (steps.length && !stale) {
+        await camera?.checkFocus();
+        signal.throwIfAborted();
+        await pad.play(steps);
+      }
       console.log(JSON.stringify({
         turn, steps, stale, captureMs: Math.round(captured - started),
         decisionMs: Math.round(decided - captured), controllerMs: Math.round(performance.now() - decided),

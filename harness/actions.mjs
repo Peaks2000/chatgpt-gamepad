@@ -1,6 +1,7 @@
 const buttons = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LS', 'RS', 'START', 'BACK', 'UP', 'DOWN', 'LEFT', 'RIGHT'];
 const stick = { type: 'number', minimum: -1, maximum: 1 };
 const trigger = { type: 'number', minimum: 0, maximum: 1 };
+const axes = ['lx', 'ly', 'rx', 'ry', 'lt', 'rt'];
 const properties = {
   ms: { type: 'integer', minimum: 20, maximum: 1500 },
   lx: stick, ly: stick, rx: stick, ry: stick, lt: trigger, rt: trigger,
@@ -43,7 +44,7 @@ export function parseAction(output) {
         (!Array.isArray(step.buttons) || step.buttons.some(button => !buttons.includes(button)))) {
       throw new Error('Unknown controller button');
     }
-    for (const axis of ['lx', 'ly', 'rx', 'ry', 'lt', 'rt']) {
+    for (const axis of axes) {
       if (!Object.hasOwn(step, axis)) continue;
       const { minimum, maximum } = properties[axis];
       if (!Number.isFinite(step[axis]) || step[axis] < minimum || step[axis] > maximum) {
@@ -52,7 +53,10 @@ export function parseAction(output) {
     }
   }
   if (duration > 2500) throw new Error('Controller plan exceeds 2500 ms');
-  return reply.steps;
+  // Preserve neutral gaps inside active plans, such as a release between taps.
+  return reply.steps.some(step => step.buttons?.length || axes.some(axis => step[axis]))
+    ? reply.steps
+    : [];
 }
 
 export function buildPrompt(goal, previous, schema = actionSchema) {

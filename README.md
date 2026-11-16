@@ -40,12 +40,12 @@ Use an app's observed controller bindings. Commands are rejected when the target
 
 ## Play with a model
 
-The standalone Windows harness captures the visible client area, sends one frame to a model, validates its next controller plan, and runs it through the same Xbox bridge. It logs capture, model, and controller time for every turn. Use windowed or borderless mode for reliable capture. Inside the Codex harness, the [Gamepad Control skill](gamepad-control/SKILL.md) uses Computer Use's native screenshot display.
+The standalone Windows harness captures the foreground game window by handle, sends one frame to a model, validates its next controller plan, and runs it through the same Xbox bridge. It checks the window again before executing a plan and logs capture, model, and controller time for every turn. Use windowed or borderless mode for reliable capture. Inside the Codex harness, the [Gamepad Control skill](gamepad-control/SKILL.md) uses Computer Use's native screenshot display.
 
 Install the capture dependency in the same Python environment you used for the controller. The harness also requires Node.js 22 or later.
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install Pillow
+.\.venv\Scripts\python.exe -m pip install "Pillow>=11.2.1"
 ```
 
 **Ollama.** Start the local Ollama server, pull a vision model per the [Ollama vision guide](https://docs.ollama.com/capabilities/vision), and pass its installed tag as `--model`. Frames are sent to the local Ollama server on port 11434.
