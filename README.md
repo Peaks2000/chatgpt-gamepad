@@ -65,4 +65,6 @@ Switch to the target window during the five-second countdown. The harness takes 
 
 Model inference is usually the dominant delay. The Codex path starts a CLI turn for each frame and is suited to slower, deliberate actions. With a fast local model, tune `--frame-width` and set `--max-frame-age-ms` to skip decisions that arrive too late for the game. Judge model performance from the logged times and play results.
 
+Add `--controls presets` to let the model choose a named action each turn. The harness applies the matching fixed controller sequence, including small aim corrections, eased turns, movement, and button taps. Start with presets when tuning a local model. Use the default direct controls when a game needs custom button combinations or hold durations. The game’s controller settings determine how far a stick action moves or turns.
+
 To check a model against a saved PNG or JPEG without sending controller inputs to a game, replace `--target MyGame.exe` with `--dry-run --frame sample.png --turns 1`. The selected model still receives the image.

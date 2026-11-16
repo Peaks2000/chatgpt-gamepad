@@ -21,14 +21,14 @@ async function runCodex(executable, args, options) {
   }
 }
 
-export function ollamaProvider(model, timeout, signal) {
+export function ollamaProvider(model, timeout, signal, schema = ollamaSchema) {
   return async (prompt, frame) => {
     const response = await fetch('http://127.0.0.1:11434/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: AbortSignal.any([signal, AbortSignal.timeout(timeout)]),
       body: JSON.stringify({
-        model, stream: false, think: false, keep_alive: '10m', format: ollamaSchema,
+        model, stream: false, think: false, keep_alive: '10m', format: schema,
         options: { temperature: 0, num_predict: 1024 },
         messages: [{ role: 'user', content: prompt, images: [Buffer.from(frame).toString('base64')] }],
       }),
@@ -44,7 +44,7 @@ export function ollamaProvider(model, timeout, signal) {
 
 export { ollamaSchema };
 
-export async function codexProvider(executable, model, timeout, signal) {
+export async function codexProvider(executable, model, timeout, signal, outputSchema = actionSchema) {
   const env = { ...process.env };
   for (const key of ['OPENAI_API_KEY', 'CODEX_API_KEY', 'CODEX_ACCESS_TOKEN']) delete env[key];
   const options = { env, signal, windowsHide: true, timeout, maxBuffer: 1024 * 1024 };
@@ -60,7 +60,7 @@ export async function codexProvider(executable, model, timeout, signal) {
       const image = join(scratch, prefix[0] === 0x89 ? 'frame.png' : 'frame.jpg');
       const schema = join(scratch, 'action.json');
       const output = join(scratch, 'decision.json');
-      await Promise.all([writeFile(image, frame), writeFile(schema, JSON.stringify(actionSchema))]);
+      await Promise.all([writeFile(image, frame), writeFile(schema, JSON.stringify(outputSchema))]);
       const args = [
         '-a', 'never', 'exec', '--ignore-user-config', '--ephemeral', '--skip-git-repo-check',
         '--sandbox', 'read-only', '--color', 'never', '--image', image,

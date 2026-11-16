@@ -6,6 +6,7 @@ import { parseArgs } from 'node:util';
 import { openGamepad } from '../gamepad-control/scripts/session.mjs';
 import { buildPrompt, parseAction } from './actions.mjs';
 import { codexProvider, ollamaProvider, ollamaSchema } from './providers.mjs';
+import { presetPrompt, presetSchema, parsePreset } from './presets.mjs';
 
 const { values: config } = parseArgs({ options: {
   provider: { type: 'string', default: 'ollama' },
@@ -14,6 +15,7 @@ const { values: config } = parseArgs({ options: {
   python: { type: 'string', default: 'python' },
   target: { type: 'string' },
   goal: { type: 'string' },
+  controls: { type: 'string', default: 'direct' },
   turns: { type: 'string', default: '10' },
   'timeout-ms': { type: 'string', default: '30000' },
   'max-frame-age-ms': { type: 'string' },
@@ -57,7 +59,7 @@ function startCapture(signal, width) {
 
 async function main() {
   if (config.help) {
-    console.log('node harness/play.mjs --provider ollama|codex --goal "..." [--model NAME] [--codex PATH] [--python PATH] [--target GAME.exe] [--turns N] [--timeout-ms MS] [--max-frame-age-ms MS] [--frame-width PX] [--dry-run --frame IMAGE]');
+    console.log('node harness/play.mjs --provider ollama|codex --goal "..." [--controls direct|presets] [--model NAME] [--codex PATH] [--python PATH] [--target GAME.exe] [--turns N] [--timeout-ms MS] [--max-frame-age-ms MS] [--frame-width PX] [--dry-run --frame IMAGE]');
     return;
   }
   const turns = Number(config.turns);
@@ -65,6 +67,7 @@ async function main() {
   const width = Number(config['frame-width']);
   const maxAge = config['max-frame-age-ms'] === undefined ? Infinity : Number(config['max-frame-age-ms']);
   if (!config.goal?.trim() || !['ollama', 'codex'].includes(config.provider) ||
+      !['direct', 'presets'].includes(config.controls) ||
       (config.provider === 'ollama' && !config.model) ||
       (config['dry-run'] ? !config.frame : !/^[^/\\]+\.exe$/i.test(config.target ?? '') || config.frame) ||
       !Number.isSafeInteger(turns) || turns < 1 ||
@@ -85,10 +88,11 @@ async function main() {
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
   try {
+    const presets = config.controls === 'presets';
+    const schema = presets ? presetSchema : config.provider === 'ollama' ? ollamaSchema : undefined;
     const decide = config.provider === 'ollama'
-      ? ollamaProvider(config.model, timeout, signal)
-      : await codexProvider(config.codex, config.model, timeout, signal);
-    const schema = config.provider === 'ollama' ? ollamaSchema : undefined;
+      ? ollamaProvider(config.model, timeout, signal, schema)
+      : await codexProvider(config.codex, config.model, timeout, signal, schema);
     const fixture = config.frame && await readFile(config.frame);
     if (!fixture) {
       console.error(`Bring ${config.target} to the foreground. Starting in 5 seconds. Ctrl+C stops the harness.`);
@@ -100,13 +104,15 @@ async function main() {
       camera = startCapture(signal, width);
     }
     pad = await openGamepad({ python: config.python, targetExe: config.target, dryRun: config['dry-run'] });
-    let previous = [];
+    let previous;
     for (let turn = 1; turn <= turns; turn++) {
       signal.throwIfAborted();
       const started = performance.now();
       const frame = fixture ?? await camera.frame();
       const captured = performance.now();
-      const steps = parseAction(await decide(buildPrompt(config.goal, previous, schema), frame));
+      const prompt = presets ? presetPrompt(config.goal, previous) : buildPrompt(config.goal, previous ?? [], schema);
+      const output = await decide(prompt, frame);
+      const { action, steps } = presets ? parsePreset(output) : { steps: parseAction(output) };
       signal.throwIfAborted();
       const decided = performance.now();
       const stale = decided - started > maxAge;
@@ -116,10 +122,10 @@ async function main() {
         await pad.play(steps);
       }
       console.log(JSON.stringify({
-        turn, steps, stale, captureMs: Math.round(captured - started),
+        turn, action, steps, stale, captureMs: Math.round(captured - started),
         decisionMs: Math.round(decided - captured), controllerMs: Math.round(performance.now() - decided),
       }));
-      previous = stale ? [] : steps;
+      previous = stale ? undefined : action ?? steps;
     }
   } finally {
     camera?.stop();
