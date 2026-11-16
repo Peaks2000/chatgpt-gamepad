@@ -5,17 +5,20 @@ description: Operate Windows games and controller-compatible apps through a virt
 
 # Control a Windows app with a virtual gamepad
 
-Use the normal computer-use surface for screenshots and window selection. Start a gamepad session once per target with [session.mjs](scripts/session.mjs) in a persistent Node session. Use the target executable basename from the observed window and the full path to a Python interpreter with `vgamepad` installed. The host also needs ViGEmBus.
+Start a gamepad session once per target with [session.mjs](scripts/session.mjs) in a persistent Node session. Use the target executable basename from the observed window and the full path to a Python interpreter with `vgamepad` installed. The host also needs ViGEmBus.
+
+In the Codex harness, use the normal Computer Use screenshot path for fast gameplay feedback. Select the game window once with `cua.getApp` in `cua_repl`. For live frames, call `gameWindow.getScreenshot()` with its default display behavior. The tool displays the image directly. Reuse the window handle and capture the frame in the same call as the controller action when both are available in that session.
 
 ```js
 const { openGamepad } = await import(sessionModuleFileUrl);
+const observeGame = () => gameWindow.getScreenshot();
 globalThis.gamepad = await openGamepad({
   python: pythonExecutable,
   targetExe: observedExecutableBasename,
 });
 await gamepad.act(
   [{ ms: 120, ly: 0.75 }, { ms: 100, buttons: ['A'], ly: 0.75 }],
-  () => sky.get_window_state({ window: observedWindow }),
+  observeGame,
 );
 ```
 
