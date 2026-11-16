@@ -37,6 +37,6 @@ await gamepad.act([
 ], observeGame);
 ```
 
-Read the [Fortnite playbook](references/fortnite.md) when playing Fortnite. It covers calibration, movement under pressure, and choosing actions from fresh frames.
+Read the [Fortnite playbook](references/fortnite.md) when playing Fortnite. Calibrate stationary turns in both directions before combining turning and movement. Use `headingDelta` and `easedYaw` from [motion.mjs](scripts/motion.mjs) to measure a turn and replay its stick profile. Reuse the settings that produced a measured turn, then check the new heading before correcting.
 
 When handing control back, ending work, or receiving a user stop signal, call `gamepad.stop()`. After a focus change, recheck the current screen before resuming authorized control. To diagnose command timing without emitting controller inputs, open with `{python: pythonExecutable, dryRun: true}` and inspect the returned trace.

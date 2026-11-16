@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { openGamepad } from './gamepad-control/scripts/session.mjs';
-import { rampSticks } from './gamepad-control/scripts/motion.mjs';
+import { easedYaw, headingDelta, rampSticks } from './gamepad-control/scripts/motion.mjs';
 
 const python = process.argv[2];
 if (!python) throw new Error('Usage: node smoke-test.mjs <python executable>');
@@ -40,6 +40,21 @@ try {
   assert.equal(motion.at(-2).state.ly, 0);
   assert.ok(motion.slice(0, -1).every(entry => entry.state.buttons.includes('LB')));
   assert.equal(motion.at(-1).state, null);
+
+  assert.equal(headingDelta(350, 10), 20);
+  assert.equal(headingDelta(10, 350), -20);
+  assert.equal(headingDelta(248, 323), 75);
+  assert.equal(headingDelta(323, 261), -62);
+  assert.equal(headingDelta(360, 0), 0);
+  assert.throws(() => headingDelta(0, NaN), /finite/);
+  assert.throws(() => easedYaw({ rx: 0.85, holdMs: 9990 }), /full turn/);
+  const yaw = easedYaw({ rx: -0.85, holdMs: 340 });
+  const { trace: turnTrace } = await pad.play(yaw);
+  assert.equal(yaw.reduce((total, report) => total + report.ms, 0), 540);
+  assert.deepEqual(yaw[5], { rx: -0.85, ms: 340 });
+  assert.ok(turnTrace.slice(0, -1).every(({ state }) => state.lx === 0 && state.ly === 0 && state.ry === 0 && state.rx <= 0));
+  assert.equal(turnTrace.at(-2).state.rx, 0);
+  assert.equal(turnTrace.at(-1).state, null);
   const interrupted = pad.play([{ ms: 10000, lt: 1 }]);
   pad.stop();
   await assert.rejects(interrupted, /session stopped/);

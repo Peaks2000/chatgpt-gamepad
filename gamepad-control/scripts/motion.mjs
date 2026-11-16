@@ -33,3 +33,27 @@ export function rampSticks({ from = {}, to = {}, ms = 120, buttons, lt, rt } = {
     return report;
   });
 }
+
+// Positive means turn right on a compass that increases clockwise.
+export function headingDelta(from, to) {
+  if (![from, to].every(Number.isFinite)) {
+    throw new RangeError('Headings must be finite numbers');
+  }
+  const clockwise = (((to % 360) - (from % 360)) % 360 + 360) % 360;
+  return clockwise > 180 ? clockwise - 360 : clockwise;
+}
+
+export function easedYaw({ rx, holdMs, rampMs = 100 }) {
+  if (!Number.isFinite(rx) || rx === 0 || Math.abs(rx) > 1) {
+    throw new RangeError('Yaw stick input must be nonzero and between -1 and 1');
+  }
+  if (!Number.isInteger(holdMs) || holdMs < 20 || holdMs + 2 * rampMs > 10000) {
+    throw new RangeError('Hold duration must be at least 20 ms and the full turn at most 10000 ms');
+  }
+  const turn = { rx };
+  return [
+    ...rampSticks({ to: turn, ms: rampMs }),
+    { ...turn, ms: holdMs },
+    ...rampSticks({ from: turn, ms: rampMs }),
+  ];
+}
