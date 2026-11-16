@@ -22,24 +22,30 @@ async function runCodex(executable, args, options) {
 }
 
 export function ollamaProvider(model, timeout, signal, schema = ollamaSchema) {
-  return async (prompt, frame) => {
-    const response = await fetch('http://127.0.0.1:11434/api/chat', {
+  async function request(endpoint, body) {
+    const response = await fetch(`http://127.0.0.1:11434/api/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: AbortSignal.any([signal, AbortSignal.timeout(timeout)]),
-      body: JSON.stringify({
-        model, stream: false, think: false, keep_alive: '10m', format: schema,
-        options: { temperature: 0, num_predict: 1024 },
-        messages: [{ role: 'user', content: prompt, images: [Buffer.from(frame).toString('base64')] }],
-      }),
+      body: JSON.stringify({ model, stream: false, keep_alive: '10m', ...body }),
     });
     if (!response.ok) throw new Error(`Ollama failed (${response.status}): ${await response.text()}`);
-    const reply = await response.json();
+    return response.json();
+  }
+
+  async function decide(prompt, frame) {
+    const reply = await request('chat', {
+      think: false, format: schema,
+      options: { temperature: 0, num_predict: 1024 },
+      messages: [{ role: 'user', content: prompt, images: [Buffer.from(frame).toString('base64')] }],
+    });
     if (reply.done_reason === 'length' || !reply.message?.content) {
       throw new Error('Ollama did not return a complete controller plan');
     }
     return reply.message.content;
-  };
+  }
+
+  return { decide, preload: () => request('generate', { prompt: '' }) };
 }
 
 export { ollamaSchema };

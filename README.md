@@ -61,7 +61,7 @@ node harness/play.mjs --provider ollama --model qwen3-vl:2b-instruct --python .\
 node harness/play.mjs --provider codex --python .\.venv\Scripts\python.exe --target MyGame.exe --goal "Move toward the next checkpoint using cover"
 ```
 
-Switch to the target window during the five-second countdown. The harness takes up to ten decisions by default. Set `--turns` for a longer session. The controller releases input after every sequence. Alt+Tab away to stop gameplay commands, or use Ctrl+C to stop the harness.
+For live capture, Ollama loads the model before the first game frame. Switch to the target window during the five-second countdown. The harness takes up to ten decisions by default. Set `--turns` for a longer session. The controller releases input after every sequence. Alt+Tab away to stop gameplay commands, or use Ctrl+C to stop the harness.
 
 Model inference is usually the dominant delay. The Codex path starts a CLI turn for each frame and is suited to slower, deliberate actions. With a fast local model, tune `--frame-width` and set `--max-frame-age-ms` to skip decisions that arrive too late for the game. Judge model performance from the logged times and play results.
 
@@ -80,6 +80,8 @@ Use `--preset-file controls.json` to replace the built-in presets with actions c
 ```
 
 To check a model against a saved PNG or JPEG without sending controller inputs to a game, replace `--target MyGame.exe` with `--dry-run --frame sample.png --turns 1`. The selected model still receives the image.
+
+To inspect decisions while you play, combine `--dry-run` with `--target MyGame.exe`. The harness captures the foreground game and logs the model's proposed inputs through the dry-run bridge. You keep the controller. With Codex as the provider, the selected game frames are sent to OpenAI.
 
 To compare models, use `--replay aim-replay.json` with the same goal and presets for each provider. Paths are relative to the manifest. Replay evaluates each frame independently, keeps expected actions out of model prompts, and runs selected actions through the dry-run controller. The command prints a score and exits with status 1 if any action mismatches or exceeds `--max-frame-age-ms` when that limit is set.
 

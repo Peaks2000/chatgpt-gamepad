@@ -66,7 +66,7 @@ function startCapture(signal, width) {
 
 async function main() {
   if (config.help) {
-    console.log('node harness/play.mjs --provider ollama|codex --goal "..." [--controls direct|presets] [--preset-file PATH] [--model NAME] [--codex PATH] [--python PATH] [--turns N] [--timeout-ms MS] [--max-frame-age-ms MS] [--frame-width PX] [--target GAME.exe | --dry-run --frame IMAGE | --replay MANIFEST]');
+    console.log('node harness/play.mjs --provider ollama|codex --goal "..." [--controls direct|presets] [--preset-file PATH] [--model NAME] [--codex PATH] [--python PATH] [--turns N] [--timeout-ms MS] [--max-frame-age-ms MS] [--frame-width PX] [[--dry-run] --target GAME.exe | --dry-run --frame IMAGE | --replay MANIFEST]');
     return;
   }
   const turns = Number(config.turns);
@@ -75,12 +75,14 @@ async function main() {
   const maxAge = config['max-frame-age-ms'] === undefined ? Infinity : Number(config['max-frame-age-ms']);
   const replayFile = config.replay;
   const dryRun = Boolean(config['dry-run'] || replayFile);
+  const sources = [config.target, config.frame, replayFile].filter(Boolean);
   if (!config.goal?.trim() || !['ollama', 'codex'].includes(config.provider) ||
       !['direct', 'presets'].includes(config.controls ?? 'direct') ||
       (config['preset-file'] && config.controls === 'direct') ||
       (config.provider === 'ollama' && !config.model) ||
-      (dryRun ? config.target || Boolean(config.frame) === Boolean(replayFile)
-        : !/^[^/\\]+\.exe$/i.test(config.target ?? '') || config.frame) ||
+      sources.length !== 1 ||
+      (config.target && !/^[^/\\]+\.exe$/i.test(config.target)) ||
+      (config.frame && !dryRun) ||
       (replayFile && config.controls === 'direct') ||
       !Number.isSafeInteger(turns) || turns < 1 ||
       !Number.isInteger(timeout) || timeout < 1000 || timeout > 300000 ||
@@ -105,11 +107,14 @@ async function main() {
   process.once('SIGTERM', stop);
   try {
     const schema = presets?.schema ?? (config.provider === 'ollama' ? ollamaSchema : undefined);
-    const decide = config.provider === 'ollama'
-      ? ollamaProvider(config.model, timeout, signal, schema)
-      : await codexProvider(config.codex, config.model, timeout, signal, schema);
+    const local = config.provider === 'ollama' ? ollamaProvider(config.model, timeout, signal, schema) : undefined;
+    const decide = local?.decide ?? await codexProvider(config.codex, config.model, timeout, signal, schema);
     const fixture = config.frame && await readFile(config.frame);
-    if (!dryRun) {
+    if (config.target) {
+      if (local) {
+        console.error(`Loading Ollama model ${config.model} before game capture.`);
+        await local.preload();
+      }
       console.error(`Bring ${config.target} to the foreground. Starting in 5 seconds. Ctrl+C stops the harness.`);
       await new Promise(resolve => {
         const timer = setTimeout(resolve, 5000);
@@ -143,15 +148,15 @@ async function main() {
         signal.throwIfAborted();
         await pad.play(steps);
       }
-      actionFrame = steps.length && !stale ? signature : undefined;
+      actionFrame = !dryRun && steps.length && !stale ? signature : undefined;
       const matched = entry ? action === entry.expected && !stale : undefined;
       correct += Number(matched === true);
       console.log(JSON.stringify({
-        turn, action, expected: entry?.expected, matched, steps, stale,
+        turn, action, expected: entry?.expected, matched, steps, stale, dryRun,
         frameChangePercent: frameChange, captureMs: Math.round(captured - started),
         decisionMs: Math.round(decided - captured), controllerMs: Math.round(performance.now() - decided),
       }));
-      previous = stale || replay ? undefined : action ?? steps;
+      previous = stale || replay || (camera && dryRun) ? undefined : action ?? steps;
     }
     if (replay) {
       console.log(JSON.stringify({ replay: replayFile, correct, total }));
