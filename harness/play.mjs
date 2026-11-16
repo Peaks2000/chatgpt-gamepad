@@ -7,6 +7,7 @@ import { openGamepad } from '../gamepad-control/scripts/session.mjs';
 import { buildPrompt, parseAction } from './actions.mjs';
 import { codexProvider, ollamaProvider, ollamaSchema } from './providers.mjs';
 import { createPresets, loadPresets } from './presets.mjs';
+import { actionFeedback, frameChangePercent } from './feedback.mjs';
 
 const { values: config } = parseArgs({ options: {
   provider: { type: 'string', default: 'ollama' },
@@ -46,7 +47,10 @@ function startCapture(signal, width) {
   return {
     async frame() {
       const reply = await request('capture');
-      return Buffer.from(reply.frame, 'base64');
+      return {
+        frame: Buffer.from(reply.frame, 'base64'),
+        signature: Buffer.from(reply.signature, 'base64'),
+      };
     },
     async checkFocus() {
       await request('check');
@@ -109,13 +113,16 @@ async function main() {
     }
     pad = await openGamepad({ python: config.python, targetExe: config.target, dryRun: config['dry-run'] });
     let previous;
+    let actionFrame;
     for (let turn = 1; turn <= turns; turn++) {
       signal.throwIfAborted();
       const started = performance.now();
-      const frame = fixture ?? await camera.frame();
+      const { frame, signature } = fixture ? { frame: fixture } : await camera.frame();
       const captured = performance.now();
+      const frameChange = frameChangePercent(actionFrame, signature);
       const prompt = presets ? presets.prompt(config.goal, previous) : buildPrompt(config.goal, previous ?? [], schema);
-      const output = await decide(prompt, frame);
+      const feedback = actionFeedback(frameChange);
+      const output = await decide(feedback ? prompt + '\n' + feedback : prompt, frame);
       const { action, steps } = presets ? presets.parse(output) : { steps: parseAction(output) };
       signal.throwIfAborted();
       const decided = performance.now();
@@ -125,8 +132,9 @@ async function main() {
         signal.throwIfAborted();
         await pad.play(steps);
       }
+      actionFrame = steps.length && !stale ? signature : undefined;
       console.log(JSON.stringify({
-        turn, action, steps, stale, captureMs: Math.round(captured - started),
+        turn, action, steps, stale, frameChangePercent: frameChange, captureMs: Math.round(captured - started),
         decisionMs: Math.round(decided - captured), controllerMs: Math.round(performance.now() - decided),
       }));
       previous = stale ? undefined : action ?? steps;

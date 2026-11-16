@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import sys
 
-from PIL import ImageGrab
+from PIL import Image, ImageGrab
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "gamepad-control" / "scripts"))
 from gamepad import Foreground
@@ -24,9 +24,14 @@ def capture(game, width):
     image.thumbnail((width, width))
     if not image.getbbox():
         raise ValueError("The game window returned a blank frame. Try windowed or borderless mode")
+    # A small RGB sample makes it possible to compare consecutive frames without decoding JPEGs in Node.
+    signature = image.resize((32, 18), Image.Resampling.BOX).tobytes()
     output = BytesIO()
     image.convert("RGB").save(output, format="JPEG", quality=83)
-    return base64.b64encode(output.getvalue()).decode("ascii"), focused
+    return {
+        "frame": base64.b64encode(output.getvalue()).decode("ascii"),
+        "signature": base64.b64encode(signature).decode("ascii"),
+    }, focused
 
 
 def main():
@@ -41,8 +46,7 @@ def main():
                     raise ValueError("Game window changed after capture")
                 reply = {"focused": True}
             else:
-                frame, focused = capture(game, width)
-                reply = {"frame": frame}
+                reply, focused = capture(game, width)
         except (ValueError, OSError) as error:
             reply = {"error": str(error)}
         print(json.dumps(reply), flush=True)

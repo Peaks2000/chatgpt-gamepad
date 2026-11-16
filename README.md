@@ -65,6 +65,8 @@ Switch to the target window during the five-second countdown. The harness takes 
 
 Model inference is usually the dominant delay. The Codex path starts a CLI turn for each frame and is suited to slower, deliberate actions. With a fast local model, tune `--frame-width` and set `--max-frame-age-ms` to skip decisions that arrive too late for the game. Judge model performance from the logged times and play results.
 
+After a live controller action, the next turn reports how much of the image changed. The model can use that signal with the current frame to spot actions that need a correction, such as trying to walk through a wall. Animation and other players also affect the reading.
+
 Add `--controls presets` to let the model choose a named action each turn. The harness applies the matching fixed controller sequence, including small aim corrections, eased turns, movement, and button taps. Start with presets when tuning a local model. Use the default direct controls when a game needs custom button combinations or hold durations. The game’s controller settings determine how far a stick action moves or turns.
 
 Use `--preset-file controls.json` to replace the built-in presets with actions calibrated for your game. Give each action a descriptive name and up to six controller states totaling at most 2.5 seconds. The harness always includes an `observe` action that sends no input. A short action list lets you test just the decisions a scenario needs.
