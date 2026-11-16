@@ -80,3 +80,12 @@ Use `--preset-file controls.json` to replace the built-in presets with actions c
 ```
 
 To check a model against a saved PNG or JPEG without sending controller inputs to a game, replace `--target MyGame.exe` with `--dry-run --frame sample.png --turns 1`. The selected model still receives the image.
+
+To compare models, use `--replay aim-replay.json` with the same goal and presets for each provider. Paths are relative to the manifest. Replay evaluates each frame independently, keeps expected actions out of model prompts, and runs selected actions through the dry-run controller. The command prints a score and exits with status 1 if any action mismatches or exceeds `--max-frame-age-ms` when that limit is set.
+
+```json
+[
+  { "frame": "target-left.png", "expected": "aim_left_small" },
+  { "frame": "target-right.png", "expected": "aim_right_small" }
+]
+```
